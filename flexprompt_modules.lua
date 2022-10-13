@@ -1503,6 +1503,14 @@ local function get_virtual_env(env_var)
     -- Return the folder name of the current virtual env, or false.
     local function get_virtual_env_var(var)
         venv_path = clink.get_env(var)
+        if venv_path then
+            local dirname = path.getname(venv_path)
+            if dirname == ".venv" or dirname == "_venv" or dirname == "venv" then
+                -- If the virtual environment is named ".venv", also include the name of the
+                -- parent directory so that we can tell the different .venv directories apart
+                return path.getname(path.getname(path.toparent(venv_path))) .. "\\" .. dirname
+            end
+        end
         return venv_path and string.match(venv_path, "[^\\/:]+$") or false
     end
 
