@@ -13,11 +13,15 @@ https://raw.githubusercontent.com/chrisant996/clink-flex-prompt/master/demo.png)
 
 # Installation
 
+## Via .zip file
+
 1. Go to the [Releases](https://github.com/chrisant996/clink-flex-prompt/releases) page.
 2. Download the latest `clink-flex-prompt-*.zip` file.
 3. Extract the files from it into your Clink scripts directory (use `clink info` to find it if you're not sure where it is).
 
-- [ ] _TBD: publish via scoop?_
+## Or, via [Scoop](https://scoop.sh)
+
+1. Run `scoop install clink-flex-prompt`
 
 # Fonts
 
@@ -43,6 +47,16 @@ Here are some recommended fonts to consider:
 - [RobotoMono Nerd Font](https://github.com/ryanoasis/nerd-fonts/releases/):  this is a patched version of Roboto Mono that adds Powerline symbols and many icon characters.
 - And there are many other fonts to have fun with -- enjoy!
 
+> **NOTE:**  Most Nerd Fonts have multiple variations of the font included.  The `flexprompt configure` wizard asks questions to figure out which variation of Nerd Font you're using (if any).
+> - Variations named "Nerd Font Mono" or "NF Mono" have small icons that take up only 1 cell (e.g. "RobotoMono **Nerd Font Mono** Medium").
+> - Variations named just "Nerd Font" without "Mono" have larger double width icons that take up 2 cells (e.g. "RobotoMono **Nerd Font** Medium").
+
+## I installed a font; why won't it show up in the list of available terminal fonts?
+
+The default built-in terminal window in Windows only lists a small set of predefined fonts.  Other terminal hosts such as Windows Terminal or ConEmu make it easy to choose other fonts, without any extra steps.
+
+If you want to add more fonts for the built-in terminal window, then you'll need to make some system registry changes.  [This article](https://superuser.com/questions/1347724/how-can-i-add-additional-fonts-to-the-windows-console) does a good job of collecting a variety of relevant info into one place.  But if that link is broken when you're reading this, then you can do an internet search for "add fonts for console windows" or similar phrases.
+
 # Configuration Wizard
 
 Flex prompt can be easily customized via its configuration wizard.
@@ -57,6 +71,12 @@ The script will look something like this:
 
 **flexprompt_config.lua**
 ```lua
+-- This pattern is in case this script runs before flexprompt.lua is loaded,
+-- for example if they're in different directories.
+flexprompt = flexprompt or {}
+flexprompt.settings = flexprompt.settings or {}
+
+-- Apply your settings here.
 flexprompt.settings.style = "classic"
 flexprompt.settings.heads = "pointed"
 flexprompt.settings.lines = "two"
@@ -64,7 +84,8 @@ flexprompt.settings.left_prompt = "{battery}{cwd}{git}"
 flexprompt.settings.right_prompt = "{exit}{overtype}{vpn}{duration}{time}"
 ```
 
-> **Tip:**  By making your manual customizations modify settings (rather than replacing them), your customizations can adapt according to the options you've chosen in the flexprompt configuration wizard.
+> [!TIP]
+> By making your manual customizations modify settings (rather than replacing them), your customizations can adapt according to the options you've chosen in the flexprompt configuration wizard.
 >
 > For example:
 > ```lua
@@ -80,8 +101,10 @@ The `flexprompt.settings.left_prompt` and `flexprompt.settings.right_prompt` str
 - `"{anyconnect}"` shows the current Cisco AnyConnect VPN connection.
 - `"{battery}"` shows the battery level and whether the battery is charging.
 - `"{break}"` shows a break between two modules; is automatically discarded if adjacent to only one visible module.
+- `"{conda}"` shows the current Conda environment, if `%CONDA_DEFAULT_ENV%` is set.
 - `"{cwd}"` shows the current working directory.
-- `"{duration}"` shows the duration of the previous command.
+- `"{duration}"` shows the duration of the previous command, if more than 3 seconds.
+- `"{env}"` shows an environment variable.
 - `"{exit}"` shows the exit code of the previous command.
 - `"{git}"` shows git status.
 - `"{hg}"` shows Mercurial status.
@@ -93,17 +116,34 @@ The `flexprompt.settings.left_prompt` and `flexprompt.settings.right_prompt` str
 - `"{npm}"` shows package name and version.
 - `"{overtype}"` shows indicator when overtype mode is on (i.e. when insert mode is off).
 - `"{python}"` shows the virtual environment.
+- `"{scm}"` shows source control management status (git, hg, svn, or custom SCM plugins).
 - `"{svn}"` shows Subversion status.
 - `"{time}"` shows the current time and/or date.
 - `"{user}"` shows the current user name and/or computer name.
 - `"{vpn}"` shows the current VPN or dialup connection.
+
+Also, the following modules work together for a new "Bubbles" style, which is designed as a variation of the `"lean"` prompt style.
+- `"{tbubble}"` shows the top prompt line for the "Bubbles" style.  You can add other modules in your `top_prompt` as well, even when using `{tbubble}`.
+- `"{lbubble}"` shows the left prompt for the "Bubbles" style.  You can add other modules in your `left_prompt` as well, but they'll look best if they come _after_ `{lbubble}`.
+- `"{rbubble}"` shows the right prompt for the "Bubbles" style.  You can add other modules in your `right_prompt` as well, but they'll look best if they come _before_ `{rbubble}`.
 
 ```lua
 flexprompt.settings.left_prompt = "{battery}{user}{cwd}{git}"
 flexprompt.settings.right_prompt = "{exit}{duration}{time}"
 ```
 
-- [ ] _TBD: details about configuring the modules.  In the meantime, you can search for "MODULE:" in `flexprompt_modules.lua` to find the available options for each module (including colors)._
+## Configuring Options for Modules
+
+> [!TIP]
+> You can search for "MODULE:" in [flexprompt_modules.lua](flexprompt_modules.lua) to find the available options for each module (including colors).
+
+Some examples:
+```lua
+flexprompt.settings.left_prompt = "{battery:onlyicon}{user:type=computer}{cwd:color=magenta:type=folder}{git:nountracked:staged=blue}"
+flexprompt.settings.right_prompt = "{exit:always}{duration:format=colons:tenths}{time:format=%a %h %e %R}"
+```
+
+- [ ] _TBD: details about configuring the modules._
 
 ## Style
 - `"lean"` shows prompt modules using only colored text.
@@ -113,6 +153,8 @@ flexprompt.settings.right_prompt = "{exit}{duration}{time}"
 ```lua
 flexprompt.settings.style = "classic"
 ```
+
+> **Note:** The `flexprompt configure` wizard lets you choose a "Bubbles" style.  The "Bubbles" style is designed for use with `flexprompt.settings.style = "lean"`; there is not a separate `"bubbles"` style.
 
 ## Charset
 - `"ascii"` uses only ASCII characters, and is compatible with all fonts; text copy/pasted from the terminal display will look right everywhere.
@@ -156,7 +198,7 @@ For the "classic" style:
 - `"dot"` is a dot (requires Unicode).
 - `"updiagonal"` is a small slash from bottom left to top right (requires Unicode).
 - `"downdiagonal"` is a small slash from top left to bottom right (requires Unicode).
-- (See flexprompt.lua for the most up to date list.)
+- (See [flexprompt.lua](flexprompt.lua) for the most up to date list.)
 - Custom separators can be provided as a table with two values, for the left and right separators.
 
 For the "rainbow" style:
@@ -237,6 +279,8 @@ flexprompt.settings.right_frame = { "═╗", "◄───╜" }
 ```lua
 flexprompt.settings.spacing = "sparse"
 ```
+
+> **Note:** Clink v1.6.1 and higher have built-in support for a [`prompt.spacing`](https://chrisant996.github.io/clink/clink.html#prompt_spacing) setting, so `flexprompt.settings.spacing` is deprecated and ignored now.  The `flexprompt configure` wizard will also automatically set Clink's `prompt.spacing` setting appropriately now.
 
 ## Flow
 - `"concise"` shows minimal text for each prompt module.
@@ -333,6 +377,20 @@ flexprompt.settings.take_optional_locks = true
 
 -- Disable detection of unpublished branches:
 flexprompt.settings.dont_check_unpublished = true
+
+-- Nerd Fonts version:  (e.g. NF version 3.0.0 and higher rearranged the icons)
+flexprompt.settings.nerdfonts_version = 3
+-- Nerd Fonts width:  (set to 1 to indicate font has mono width icons, or 2 to indicate double-width icons)
+flexprompt.settings.nerdfonts_width = 2
+
+-- Override certain icons with color emoji in Windows Terminal:
+flexprompt.settings.use_color_emoji = true
+
+-- Use Powerline icons (the font must support them):
+flexprompt.settings.powerline_font = true
+
+-- Supersede other settings and try to avoid displaying graphics that may not exist in all fonts.
+flexprompt.settings.no_graphics = true
 ```
 
 # Writing Custom Prompt Modules
@@ -347,7 +405,8 @@ segments.
 Put your prompt module code in a Lua file whose name starts with `flexprompt_`
 in the same directory as the `flexprompt.lua` file.
 
-> **Advanced:**  Since scripts are loaded in alphabetical order, the easiest thing to do is name your script something that follows after `flexprompt_` alphabetically.  But another more advanced option is to defer making use of `flexprompt.` until the first [onbeginedit](https://chrisant996.github.io/clink/clink.html#clink.onbeginedit) event, and then the script name wouldn't have the alphabetical order limitation.
+> [!TIP]
+> Since scripts are loaded in alphabetical order, the easiest thing to do is name your script something that follows after `flexprompt_` alphabetically.  But another more advanced option is to defer making use of `flexprompt.` until the first [onbeginedit](https://chrisant996.github.io/clink/clink.html#clink.onbeginedit) event, and then the script name wouldn't have the alphabetical order limitation.
 
 Here is a basic example of a prompt module, which we'll call "mfm" as an
 abbreviation for "my first module":
@@ -509,6 +568,33 @@ end
 flexprompt.add_module("mfm", my_first_module)
 ```
 
+## Abbreviation When Too Wide
+
+Prompt modules can optionally return a callback function for use in case the
+terminal is not wide enough for the full prompt to be displayed.  If the prompt
+is too wide, flexprompt calls each module's callback function to get an
+abbreviated form of the module and uses that instead to help the prompt fit.
+
+To provide a callback function, the prompt module should return a table with a
+`condense_callback` field:
+
+```lua
+return {
+    -- Normal results; text and colors.
+    "full module text here",
+    "green",
+    "black",
+    -- Callback when short form is needed.
+    condense_callback = function ()
+        return {
+            "mini text",
+            "green",
+            "black",
+        }
+    end
+}
+```
+
 ## Async Prompt Filtering
 
 Clink supports asynchronous prompt filtering, where the input line editor stays
@@ -544,7 +630,7 @@ local function collect_files_info()
 end
 ```
 
-## Step Two -- Make it collect the info asynchronously
+### Step Two -- Make it collect the info asynchronously
 
 Make a module that calls `flexprompt.prompt_info()`.  We'll discuss the middle
 two parameters later -- they can be empty strings if you don't need them.
@@ -571,7 +657,7 @@ end
 flexprompt.add_module("files", files_module)
 ```
 
-## Step Three -- [Optional] Maybe reset the cached prompt info
+### Step Three -- [Optional] Maybe reset the cached prompt info
 
 Async prompt filtering shows the previous prompt content until the async
 collection function finishes.
@@ -616,7 +702,59 @@ end
 
 ## Customizable Styling
 
-- [ ] _TBD: there is a lot of styling available, but it's poorly documented, sorry.  You can reverse engineer details from reading `flexprompt.lua` and the configuration option tables near the beginning of it._
+> [!TIP]
+> There is a lot of styling available, but it's poorly documented, sorry.  You can reverse engineer details from reading [flexprompt.lua](flexprompt.lua) and the configuration option tables near the beginning of it.
+
+- [ ] _TBD: add more documentation about available styling._
+
+### Customizing Icons
+
+> [!NOTE]
+> For now this section just has a quick example showing the structure for icon definitions in flexprompt.
+
+- [ ] _TBD: add more documentation about customizing icons._
+
+```lua
+flexprompt.settings.symbol["icon_name_here"] =
+{
+    -- All fields here are optional; supply as many or as few as you want.
+
+    -- Symbol to use in Windows Terminal, if flexprompt.settings.use_color_emoji is true.
+    coloremoji      = "E",
+
+    -- Symbol to use in Windows Terminal.
+    winterminal     = "W",
+
+    -- Symbol to use in ConEmu.
+    conemu          = "C",
+
+    -- Symbol to use with Nerd Fonts v3 fonts.
+    -- Can be a string or a table:
+                      -- String:  Use this symbol always.
+    nerdfonts3      = "3",
+                      -- Table:  Use second symbol "3 " with double-width icon fonts, otherwise use first symbol "3".
+    nerdfonts3      = { "3", "3 " },
+
+    -- Symbol to use with Nerd Fonts v2 fonts.
+    -- Can be a string or a table:
+                      -- String:  Use this symbol always.
+    nerdfonts2      = "2",
+                      -- Table:  Use second symbol "2 " with double-width icon fonts, otherwise use first symbol "2".
+    nerdfonts2      = { "2", "2 " },
+
+    -- Symbol to use with fonts that have Powerline characters but not Nerd Fonts icons.
+    powerline       = "P",
+
+    -- Symbol to use with Unicode fonts that don't have Powerline characters.
+    unicode         = "U",
+
+    -- Symbol to use in plain ASCII mode.
+    ascii           = "A",
+
+    -- Fallback symbol to use if none of the other available specializations are applicable.
+    "F"
+}
+```
 
 ## Running Actions
 
