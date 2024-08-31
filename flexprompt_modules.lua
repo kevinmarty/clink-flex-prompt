@@ -390,14 +390,17 @@ local function get_battery_status(levelicon, onlyicon)
     acpower = status.acpower
     charging = status.charging
 
-    if not level or level < 0 or (acpower and not charging) then
+    if not level or level < 0 then
         return "", 0
     end
 
     local batt_symbol
     if charging then
         batt_symbol = flexprompt.get_symbol("charging")
-    else
+    elseif acpower then
+        batt_symbol = flexprompt.get_symbol("smartcharging")
+    end
+    if not batt_symbol or batt_symbol == "" then
         batt_symbol = flexprompt.get_symbol("battery")
     end
 
@@ -406,7 +409,7 @@ local function get_battery_status(levelicon, onlyicon)
         if series then
             series = series[flexprompt.get_nerdfonts_version()]
             if series then
-                batt_symbol = series[math.floor(level * (#series - 1) / 100)]
+                batt_symbol = series[math.floor(level * (#series - 1) / 100) + 1]
                 if flexprompt.get_nerdfonts_width() == 2 then
                     batt_symbol = batt_symbol .. " "
                 end
@@ -1151,7 +1154,7 @@ end
 local hg_colors =
 {
     clean       = { "c",  "clean",  "vcs_clean" },
-    dirty       = { "d",  "dirty",  "vcs_conflict" },
+    dirty       = { "d",  "dirty",  "vcs_dirty" },
 }
 
 local hg = {}
@@ -1696,11 +1699,7 @@ local cached_scm = {}
 -- Collects SCM status info.
 --
 -- Uses async coroutine calls.
-local function collect_scm_info(detected_info, no_untracked, no_submodules)
-    local flags = {}
-    flags.no_untracked = no_untracked
-    flags.no_submodules = no_submodules
-
+local function collect_scm_info(detected_info, flags)
     local info = flexprompt.get_scm_info(detected_info, flags)
 
     maybe_git_fetch(info)
@@ -2123,25 +2122,26 @@ end
 
 local function info_git(dir, tested_info, flags) -- luacheck: no unused
     local info = {}
+    flags = flags or {}
     if tested_info and tested_info.branch then
         info.branch, info.detached, info.commit = tested_info.branch, tested_info.detached, tested_info.commit
     else
         info.branch, info.detached, info.commit = flexprompt.get_git_branch()
     end
-    info.status = flexprompt.get_git_status()
+    info.status = flexprompt.get_git_status(flags.no_untracked, not flags.no_submodules)
     if info.status and info.status.errmsg then
         info._error = true
     else
-        if not flexprompt.settings.no_ahead_behind then
+        if not flags.no_ahead_behind then
             info.ahead, info.behind = flexprompt.get_git_ahead_behind()
         end
-        if not flexprompt.settings.no_conflict then
+        if not flags.no_conflict then
             info.conflict = flexprompt.get_git_conflict()
         end
-        if not flexprompt.settings.no_remote then
+        if not flags.no_remote then
             info.remote = flexprompt.get_git_remote()
         end
-        if not flexprompt.settings.no_submodules then
+        if not flags.no_submodules then
             info.submodule = info.git_dir and info.git_dir:find(path.join(info.wks_dir, "modules\\"), 1, true) == 1
         end
     end
@@ -2153,45 +2153,66 @@ local function test_hg(dir)
     return flexprompt.has_dir(dir, ".hg")
 end
 
-local function info_hg(dir) -- luacheck: no unused
+local function info_hg(dir, tested_info, flags) -- luacheck: no unused
     local info = {}
     info.type = "hg"
-    -- Get branch name.
+    -- Get summary info from Mercurial.
     do
-        local pipe = io.popenyield("2>&1 hg identify -b")
+        -- Using `hg summary` is reported as a little faster than `hg status`.
+        -- But the latter is machine readable, and the former is human readable.
+        -- So set LC_MESSAGES=C to force English output, so that parsing can
+        -- work reliably.
+        local pipe = io.popenyield("set LC_MESSAGES=C& 2>&1 hg summary")
         if pipe then
-            info.branch = pipe:read()
-            info.branch = info.branch:gsub("^ +", ""):gsub(" +$", "")
-            pipe:close()
-        end
-        if not info.branch or info.branch == "" then
-            info.branch = "<unidentified>"
-        end
-    end
-    -- Get file status.
-    do
-        local pipe = io.popenyield("2>&1 hg status -amrd -v")
-        if pipe then
-            info.status = { add=0, modify=0, delete=0, untracked=0 }
+            local working = { add=0, modify=0, delete=0, conflict=0, untracked=0 }
             for line in pipe:lines() do
-                local s = line:match("^([AMR!?]) ")
-                if s then
-                    -- Report file status.
-                    if s == "A" then
-                        info.status.add = info.status.add + 1
-                    elseif s == "M" then
-                        info.status.modify = info.status.modify + 1
-                    elseif s == "R" then
-                        info.status.delete = info.status.delete + 1
-                    else
-                        info.status.untracked = info.status.untracked + 1
+                local m = line:match("^branch:%s+(.*)")
+                if m then
+                    info.branch = m
+                elseif line:match("^commit:%s") then
+                    m = line:match("(%d+) modified")
+                    if m then
+                        working.modify = tonumber(m)
                     end
-                elseif s:match("#.* repo.* unfinished ") then
-                    -- Report unfinished states as conflict.
-                    info.conflict = true
+                    m = line:match("(%d+) added")
+                    if m then
+                        working.add = tonumber(m)
+                    end
+                    m = line:match("(%d+) deleted")
+                    if m then
+                        working.delete = tonumber(m)
+                    end
+                    m = line:match("(%d+) renamed")
+                    if m then
+                        working.add = working.add + tonumber(m)
+                        working.delete = working.delete + tonumber(m)
+                    end
+                    m = line:match("(%d+) unknown")
+                    if m then
+                        working.untracked = tonumber(m)
+                    end
+                    m = line:match("(%d+) unresolved")
+                    if m then
+                        working.conflict = tonumber(m)
+                    end
                 end
             end
             pipe:close()
+            if working then
+                if working.conflict > 0 then
+                    info.unresolved = working.conflict
+                end
+                if flags.no_untracked then
+                    working.untracked = 0
+                end
+            end
+            for _,v in pairs(working) do
+                if v > 0 then
+                    info.status = info.status or {}
+                    info.status.working = working
+                    break
+                end
+            end
         else
             info._error = true
         end
@@ -2203,7 +2224,7 @@ local function test_svn(dir)
     return flexprompt.has_dir(dir, ".svn")
 end
 
-local function info_svn(dir) -- luacheck: no unused
+local function info_svn(dir, tested_info, flags) -- luacheck: no unused
     local info = {}
     info.type = "svn"
     -- Get branch name.
@@ -2224,26 +2245,47 @@ local function info_svn(dir) -- luacheck: no unused
     end
     -- Get file status.
     if not info._error then
-        local pipe = io.popenyield("2>nul svn status -q")
+        local command = "2>nul svn status"
+        if flags.no_untracked then
+            command = command .. " -q"
+        end
+        local pipe = io.popenyield(command)
         if pipe then
-            info.status = { add=0, modify=0, delete=0, conflict=0, untracked=0 }
+            local working = { add=0, modify=0, delete=0, conflict=0, untracked=0 }
             for line in pipe:lines() do
-                local s = line:match("^([AMDCRE!~])")
+                local s = line:match("^([AMDCR?!~])")
                 if s then
                     if s == "A" then
-                        info.status.add = info.status.add + 1
+                        working.add = working.add + 1
                     elseif s == "M" then
-                        info.status.modify = info.status.modify + 1
+                        working.modify = working.modify + 1
                     elseif s == "D" then
-                        info.status.delete = info.status.delete + 1
+                        working.delete = working.delete + 1
                     elseif s == "C" then
-                        info.status.conflict = info.status.conflict + 1
-                    else
-                        info.status.untracked = info.status.untracked + 1
+                        working.conflict = working.conflict + 1
+                    elseif s == "R" then
+                        working.add = working.add + 1
+                        working.delete = working.delete + 1
+                    elseif s == "?" then
+                        working.untracked = working.untracked + 1
+                    elseif s == "!" then
+                        working.delete = working.delete + 1
+                    elseif s == "~" then
+                        working.modify = working.modify + 1
                     end
                 end
             end
             pipe:close()
+            if working and working.conflict > 0 then
+                info.unresolved = working.conflict
+            end
+            for _,v in pairs(working) do
+                if v > 0 then
+                    info.status = info.status or {}
+                    info.status.working = working
+                    break
+                end
+            end
         else
             info._error = true
         end
